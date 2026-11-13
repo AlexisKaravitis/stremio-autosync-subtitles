@@ -74,8 +74,9 @@ which releases exist.
 Some older films have subtitles only for a 25 fps DVD, in every language, while the copies
 streamed today run at 23.976 fps and last about 4% longer. Nothing can be retimed to the modern
 copy, because no subtitle has its timing. When every subtitle the addon finds is marked 25 fps
-and they all run at the same speed, it adds one more version, listed last: the most likely one
-stretched to film speed. That removes the drift. A constant offset of a few seconds may remain;
+and they all run at the same speed, it adds one more version: the most likely one stretched to
+film speed. It has its own entry in the player's subtitle menu, named after the language, for
+example "Greek (film speed)", so it cannot be confused with the others. That removes the drift. A constant offset of a few seconds may remain;
 correct it with the subtitle delay setting in Stremio's player.
 
 ## Limits

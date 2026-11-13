@@ -66,7 +66,7 @@ Object.assign(files, {
 });
 listings.C = [
   { id: 31, url: u(31), lang: 'eng', m: 'i', movieReleaseName: 'Three.2020.1080p.BluRay.x264-AAA' },
-  { id: 32, url: u(32), lang: 'spa', m: 'i', movieReleaseName: 'Three.2020.1080p.BluRay.x264-AAA' },
+  { id: 32, url: u(32) + '?senc=cp1250', lang: 'spa', m: 'i', movieReleaseName: 'Three.2020.1080p.BluRay.x264-AAA' }, // link with an encoding note
   { id: 33, url: u(33), lang: 'ell', m: 'i', movieReleaseName: 'Three.2020.HDTV.x264-BBB' },
   { id: 34, url: u(34), lang: 'ell', m: 'i', movieReleaseName: 'Three.2020.1080p.BluRay.x264-AAA' },
 ];
@@ -136,7 +136,7 @@ global.fetch = async (url) => {
     const list = listings[titles[id] || 'A'];
     return reply(JSON.stringify({ subtitles: mode === 'nogreek' ? list.filter((s) => s.lang !== 'ell') : list }));
   }
-  const n = (/\/file\/(\d+)$/.exec(url) || [])[1];
+  const n = (/\/file\/(\d+)(\?senc=[\w-]+)?$/.exec(url) || [])[1];
   if (mode === 'flaky' && !seen.has(url)) { seen.add(url); return reply('<html>temporary error', 520); }
   if (redirects[n]) return reply('', 302, { location: redirects[n] });
   if (n === '55' || n === '56' || n === '57') return reply('<html>temporary error', 520);
@@ -250,6 +250,7 @@ test('releases about a second apart are kept apart, and each gets its own correc
 test('a translation that agrees with no other subtitle is never offered as it is', async () => {
   const subs = await list('/subtitles/movie/tt0000007.json');
   assert.ok(subs.length >= 1);
+  assert.ok(fetched.includes(u(32) + '?senc=cp1250'), 'a link carrying an encoding note is still used');
   for (const sub of subs) {
     const e = H.error(await fetchSrt(sub), greek3);
     assert.ok(good(e), `offered a version that is off: median ${e.median} ms over ${e.lines} lines`);
@@ -262,6 +263,8 @@ test('when every subtitle is for a 25 fps DVD, a film-speed version is added las
   assert.ok(good(H.error(await fetchSrt(subs[0]), greek6)), 'the first version is still the DVD timing');
   const stretched = H.warp(greek6, (t) => t * (25 / 23.976));
   assert.match(subs[subs.length - 1].id, /-filmspeed$/);
+  assert.strictEqual(subs[subs.length - 1].lang, 'Greek (film speed)', 'it has its own name in the menu');
+  assert.ok(subs.slice(0, -1).every((x) => x.lang === 'ell'));
   assert.ok(H.error(await fetchSrt(subs[subs.length - 1]), stretched).max <= 2, 'the last version is the same text at film speed');
   assert.strictEqual(subs.filter((x) => /-filmspeed$/.test(x.id)).length, 1, 'only one of them');
 });
