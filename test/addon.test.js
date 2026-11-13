@@ -101,7 +101,20 @@ listings.E = [
   { id: 57, url: u(57), lang: 'ger', m: 'i', movieReleaseName: 'Five.2020.1080p.BluRay.x264-DOWN' }, // always 520
 ];
 
-const titles = { tt0000005: 'B', tt0000006: 'B', tt0000007: 'C', tt0000008: 'D', tt0000009: 'E' };
+// F: an older film whose subtitles, in every language, are all for the 25 fps DVD.
+const film6 = H.film(12);
+const greek6 = H.translate(film6);
+Object.assign(files, { 61: H.srt(film6), 62: H.srt(H.translate(film6, 61, 'Hola')), 63: H.srt(H.translate(film6, 62, 'Ciao')), 64: H.srt(greek6) });
+const dvdOnly = (fps) => [
+  { id: 61, url: u(61), lang: 'eng', m: 'i', fpsMilli: fps, movieReleaseName: 'Six.2002.DVDRip.XviD-AAA' },
+  { id: 62, url: u(62), lang: 'spa', m: 'i', fpsMilli: fps, movieReleaseName: 'Six.2002.DVDRip.XviD-AAA' },
+  { id: 63, url: u(63), lang: 'ita', m: 'i', fpsMilli: fps, movieReleaseName: 'Six' },
+  { id: 64, url: u(64), lang: 'ell', m: 'i', fpsMilli: fps, movieReleaseName: 'Six' },
+];
+listings.F = dvdOnly(25000);
+listings.G = dvdOnly(23976); // the same files, marked as film speed
+
+const titles = { tt0000030: 'F', tt0000031: 'G', tt0000005: 'B', tt0000006: 'B', tt0000007: 'C', tt0000008: 'D', tt0000009: 'E' };
 const seen = new Set();
 const fetched = [];
 let mode = 'ok';
@@ -240,6 +253,24 @@ test('a translation that agrees with no other subtitle is never offered as it is
   for (const sub of subs) {
     const e = H.error(await fetchSrt(sub), greek3);
     assert.ok(good(e), `offered a version that is off: median ${e.median} ms over ${e.lines} lines`);
+  }
+});
+
+test('when every subtitle is for a 25 fps DVD, a film-speed version is added last', async () => {
+  const subs = await list('/subtitles/movie/tt0000030.json');
+  assert.ok(subs.length >= 2 && subs.length <= 4, `${subs.length} versions`);
+  assert.ok(good(H.error(await fetchSrt(subs[0]), greek6)), 'the first version is still the DVD timing');
+  const stretched = H.warp(greek6, (t) => t * (25 / 23.976));
+  assert.match(subs[subs.length - 1].id, /-filmspeed$/);
+  assert.ok(H.error(await fetchSrt(subs[subs.length - 1]), stretched).max <= 2, 'the last version is the same text at film speed');
+  assert.strictEqual(subs.filter((x) => /-filmspeed$/.test(x.id)).length, 1, 'only one of them');
+});
+
+test('no film-speed version when the subtitles are not marked 25 fps, or already differ in speed', async () => {
+  for (const id of ['tt0000031', 'tt0000001', 'tt0000005', 'tt0000007']) {
+    const subs = await list(`/subtitles/movie/${id}.json`);
+    assert.ok(subs.length >= 1, id);
+    assert.ok(!subs.some((x) => /-filmspeed$/.test(x.id)), id);
   }
 });
 

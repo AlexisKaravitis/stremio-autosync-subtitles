@@ -69,13 +69,22 @@ plan has no billing, and Stremio carries on with its other subtitles.
 If the first version is off, try the next one: the addon cannot see your video, only work out
 which releases exist.
 
+### Films that only have DVD-era subtitles
+
+Some older films have subtitles only for a 25 fps DVD, in every language, while the copies
+streamed today run at 23.976 fps and last about 4% longer. Nothing can be retimed to the modern
+copy, because no subtitle has its timing. When every subtitle the addon finds is marked 25 fps
+and they all run at the same speed, it adds one more version, listed last: the most likely one
+stretched to film speed. That removes the drift. A constant offset of a few seconds may remain;
+correct it with the subtitle delay setting in Stremio's player.
+
 ## Limits
 
 - **It can only retime to a timing some subtitle already has.** If every subtitle that exists
   for a film, in every language, was made for a release nobody streams any more, there is
-  nothing to sync to. The usual case is an older film whose subtitles were all made for a
-  25 fps DVD while today's copies run at 24 fps: the subtitles start roughly right and drift
-  to minutes late by the end.
+  nothing to sync to. For the commonest case, 25 fps DVD subtitles, it adds a film-speed
+  version as described above, which is a guess and may need a delay adjustment. It assumes
+  23.976 fps; a copy at exactly 24 fps would still drift by about six seconds over 100 minutes.
 - It can only retime subtitles that exist on OpenSubtitles for your language. In a check of 31
   well-known titles, 6 had no Greek subtitles there.
 - Where a film has a cut in the middle, one or two lines right at the cut can stay mistimed.
