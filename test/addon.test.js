@@ -121,9 +121,9 @@ const KEY = 'test-key-do-not-leak';
 const BLURAY = 'filename=Seven.2002.1080p.BluRay.x264-BBB.mkv'; // the copy being played in these tests
 const subdlZips = {};     // archive name -> zip
 const subdlListings = {}; // imdb id -> what SubDL lists
-let subdlDown = false, subdlBusy = false;
+let subdlDown = false, subdlBusy = false, subdlWait = null; // subdlWait: the retry-after SubDL gives when busy
 function subdlFetch(url) {
-  const reply = (body, status = 200) => ({ ok: status >= 200 && status < 300, status, headers: { get: () => null }, arrayBuffer: async () => Buffer.from(body) });
+  const reply = (body, status = 200, headers = {}) => ({ ok: status >= 200 && status < 300, status, headers: { get: (k) => headers[k.toLowerCase()] ?? null }, arrayBuffer: async () => Buffer.from(body) });
   const q = new URL(url);
   if (q.searchParams.get('api_key') !== KEY) return reply('{"status":false,"error":"not_authorized"}', 403);
   if (q.host === 'api.subdl.com') {
@@ -131,7 +131,7 @@ function subdlFetch(url) {
     const list = subdlListings[q.searchParams.get('imdb_id')] || [];
     return reply(JSON.stringify({ status: true, subtitles: list.map((x) => ({ ...x, url: `${x.url}?api_key=${KEY}` })) }));
   }
-  if (subdlBusy) return reply('slow down', 429);
+  if (subdlBusy) return reply('slow down', 429, subdlWait ? { 'retry-after': String(subdlWait) } : {});
   const name = q.pathname.split('/').pop();
   return subdlZips[name] ? reply(subdlZips[name]) : reply('nope', 404);
 }
@@ -162,9 +162,11 @@ subdlListings.tt0000042 = english;
 subdlListings.tt0000043 = english;
 subdlListings.tt0000044 = english;
 subdlListings.tt0000045 = english.slice(0, 2).map((x, i) => ({ ...x, url: `/subtitle/200-${i}.zip` })); // files not fetched by any other test
+subdlListings.tt0000047 = english.slice(0, 2).map((x, i) => ({ ...x, url: `/subtitle/300-${i}.zip` }));
+subdlListings.tt0000048 = english;
 subdlListings.tt0000041 = [...english, { release_name: 'Seven (2002) 1080p-720p BDRip', language: 'EL', lang: 'Greek', url: '/subtitle/100-3.zip' }];
 
-const titles = { tt0000040: 'S', tt0000041: 'T', tt0000042: 'S', tt0000043: 'S', tt0000044: 'S', tt0000045: 'S', tt0000030: 'F', tt0000031: 'G', tt0000005: 'B', tt0000006: 'B', tt0000007: 'C', tt0000008: 'D', tt0000009: 'E' };
+const titles = { tt0000040: 'S', tt0000041: 'T', tt0000042: 'S', tt0000043: 'S', tt0000044: 'S', tt0000045: 'S', tt0000047: 'S', tt0000048: 'S', tt0000030: 'F', tt0000031: 'G', tt0000005: 'B', tt0000006: 'B', tt0000007: 'C', tt0000008: 'D', tt0000009: 'E' };
 const seen = new Set();
 const fetched = [];
 let mode = 'ok';
@@ -196,7 +198,7 @@ global.fetch = async (url) => {
   return reply('nope', 404);
 };
 
-const { handle } = require('../lib/addon');
+const { handle, resetSubdlRest } = require('../lib/addon');
 function call(url, { method = 'GET', host = 'addon.test', headers = {} } = {}) {
   return new Promise((resolve) => {
     const res = {
@@ -484,7 +486,30 @@ test('SubDL: after "too many requests" it is left alone, and the addon still ans
     assert.strictEqual(r.headers['cache-control'], 'public, max-age=300, s-maxage=300', 'kept only briefly, so the fuller answer is tried for soon');
     const downloads = fetched.slice(before).filter((f) => f.startsWith('https://dl.subdl.com/'));
     assert.strictEqual(downloads.length, 1, 'one refusal is enough: no retry, and the other files are not attempted');
-  } finally { subdlBusy = false; delete process.env.SUBDL_API_KEY; }
+  } finally { subdlBusy = false; resetSubdlRest(); delete process.env.SUBDL_API_KEY; }
+});
+
+test('SubDL: when the daily limit is used up it is not asked again until the reset', async () => {
+  process.env.SUBDL_API_KEY = KEY;
+  subdlBusy = true; subdlWait = 50000; // "try again in about 14 hours"
+  try {
+    const first = await call(`/subtitles/movie/tt0000047/${BLURAY}.json`);
+    assert.ok(JSON.parse(first.body).subtitles.length >= 1);
+    assert.strictEqual(first.headers['cache-control'], 'public, max-age=3600, s-maxage=3600', 'looked at again in an hour, not every few minutes');
+    subdlBusy = false; // even if SubDL would answer now, the wait it asked for is respected
+    const before = fetched.length;
+    const second = await call(`/subtitles/movie/tt0000048/${BLURAY}.json`);
+    assert.ok(JSON.parse(second.body).subtitles.length >= 1);
+    assert.ok(!fetched.slice(before).some((f) => /subdl\.com/.test(f)), 'SubDL is not contacted at all while it rests');
+  } finally { subdlBusy = false; subdlWait = null; resetSubdlRest(); delete process.env.SUBDL_API_KEY; }
+});
+
+test('SubDL: an answer that cost downloads is kept for three days', async () => {
+  process.env.SUBDL_API_KEY = KEY;
+  try {
+    const r = await call(`/subtitles/movie/tt0000040/${BLURAY}.json`);
+    assert.strictEqual(r.headers['cache-control'], 'public, max-age=7200, s-maxage=259200');
+  } finally { delete process.env.SUBDL_API_KEY; }
 });
 
 test('zip archives: reads the subtitle, refuses junk and oversized entries', () => {

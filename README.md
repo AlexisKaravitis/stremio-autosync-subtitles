@@ -46,11 +46,15 @@ strips it from every link before building its own, and adds it back only when th
 downloads a file. Tests check that it never appears in an answer or inside a subtitle link.
 Without a key this source is simply off.
 
-SubDL is a fallback, not an equal. The addon asks it only when OpenSubtitles did not answer, has
-nothing in your language, or has no subtitle for the kind of release you are playing (for
-example only DVD ones for a BluRay copy). It takes at most six files from SubDL for a title,
-one at a time, and leaves SubDL alone for a minute after a "too many requests" answer. If SubDL
-is slow or unavailable, you get what OpenSubtitles alone would have given.
+SubDL is a fallback, not an equal, because its free plan allows only 50 downloads a day:
+
+- The addon asks it only when OpenSubtitles did not answer, has nothing in your language, or
+  has no subtitle for the kind of release you are playing (for example only DVD ones for a
+  BluRay copy).
+- It takes at most three files from SubDL for a title, one at a time. That is roughly 16 new
+  titles a day; an answer that used SubDL is kept for three days, so repeats cost nothing.
+- When SubDL says the limit is used up, it is not contacted again until the time it gives, and
+  you get what OpenSubtitles alone has in the meantime.
 
 ### What the free plan covers
 
