@@ -86,7 +86,7 @@ listings.D = [
   { id: 44, url: u(44), lang: 'ell', m: 'i', movieReleaseName: 'Four.2020.DVDRip.x264-CCC' },
 ];
 
-// E: one file redirects to another site, one keeps failing with a temporary error.
+// E: one file redirects to another site, three keep failing with a temporary error.
 const film5 = H.film(10);
 const greek5 = H.translate(film5);
 Object.assign(files, { 52: H.srt(film5), 53: H.srt(H.translate(film5, 51, 'Hola')), 54: H.srt(H.warp(greek5, (t) => t - 4000)) });
@@ -97,6 +97,8 @@ listings.E = [
   { id: 53, url: u(53), lang: 'spa', m: 'i', movieReleaseName: 'Five.2020.1080p.BluRay.x264-AAA' },
   { id: 54, url: u(54), lang: 'ell', m: 'i', movieReleaseName: 'Five.2020.HDTV.x264-BBB' },
   { id: 55, url: u(55), lang: 'fre', m: 'i', movieReleaseName: 'Five.2020.1080p.BluRay.x264-DOWN' }, // always 520
+  { id: 56, url: u(56), lang: 'ita', m: 'i', movieReleaseName: 'Five.2020.1080p.BluRay.x264-DOWN' }, // always 520
+  { id: 57, url: u(57), lang: 'ger', m: 'i', movieReleaseName: 'Five.2020.1080p.BluRay.x264-DOWN' }, // always 520
 ];
 
 const titles = { tt0000005: 'B', tt0000006: 'B', tt0000007: 'C', tt0000008: 'D', tt0000009: 'E' };
@@ -124,7 +126,7 @@ global.fetch = async (url) => {
   const n = (/\/file\/(\d+)$/.exec(url) || [])[1];
   if (mode === 'flaky' && !seen.has(url)) { seen.add(url); return reply('<html>temporary error', 520); }
   if (redirects[n]) return reply('', 302, { location: redirects[n] });
-  if (n === '55') return reply('<html>temporary error', 520);
+  if (n === '55' || n === '56' || n === '57') return reply('<html>temporary error', 520);
   if (n === '7') return reply(files[7], 200, { 'content-length': String(files[7].length) });
   if (files[n]) return reply(files[n]);
   return reply('nope', 404);
@@ -247,12 +249,14 @@ test('one stray line hours after the film does not discard the other files', asy
   for (const sub of subs) assert.ok(good(H.error(await fetchSrt(sub), greek4)));
 });
 
-test('a redirect to another site is not followed, and a download that keeps failing shortens the cache time', async () => {
+test('a redirect to another site is not followed; many failed downloads shorten the cache time, one does not', async () => {
   const r = await call('/subtitles/movie/tt0000009.json');
   const subs = JSON.parse(r.body).subtitles;
   assert.ok(subs.length >= 1);
   assert.ok(good(H.error(await fetchSrt(subs[0]), greek5)));
   assert.strictEqual(r.headers['cache-control'], 'public, max-age=300, s-maxage=300');
+  // scenario A has two files that can never be used; that alone must not shorten anything
+  assert.strictEqual((await call('/subtitles/movie/tt0000002.json')).headers['cache-control'], 'public, max-age=7200, s-maxage=21600');
 });
 
 test('nothing is ever requested from outside the OpenSubtitles addon and its subtitle servers', () => {
