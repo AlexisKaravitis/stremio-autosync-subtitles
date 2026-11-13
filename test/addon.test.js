@@ -29,6 +29,27 @@ const listing = [
   { id: 8, url: 'https://evil.example/steal', lang: 'eng', m: 'i' },   // must never be fetched
 ];
 
+// A second film whose web and BluRay releases are only 1.1 s apart, plus a "signs only" file.
+const later = (cues) => H.warp(cues, (t) => t + 1100);
+const film2 = H.film(5);
+const greek2 = H.translate(film2);
+Object.assign(files, {
+  21: H.srt(film2), 22: H.srt(H.translate(film2, 21, 'Hola')),
+  23: H.srt(later(film2)), 24: H.srt(later(H.translate(film2, 22, 'Ciao'))), 25: H.srt(later(H.translate(film2, 23, 'Salut'))),
+  26: H.srt(H.warp(greek2, (t) => t + 20000)),
+  27: H.srt(film2.filter((_, i) => i % 40 === 0)),
+});
+const listing2 = [
+  { id: 21, url: u(21), lang: 'eng', m: 'i', movieReleaseName: 'Two.2023.1080p.WEB-DL.x264-AAA' },
+  { id: 22, url: u(22), lang: 'spa', m: 'i', movieReleaseName: 'Two.2023.1080p.WEB-DL.x264-AAA' },
+  { id: 23, url: u(23), lang: 'eng', m: 'i', movieReleaseName: 'Two.2023.1080p.BluRay.x264-BBB' },
+  { id: 24, url: u(24), lang: 'ita', m: 'i', movieReleaseName: 'Two.2023.1080p.BluRay.x264-BBB' },
+  { id: 25, url: u(25), lang: 'fre', m: 'i', movieReleaseName: 'Two.2023.720p.BluRay.x264-CCC' },
+  { id: 26, url: u(26), lang: 'ell', m: 'i', movieReleaseName: 'Two.2023.HDTV-DDD' },
+  { id: 27, url: u(27), lang: 'eng', m: 'i', movieReleaseName: 'Two.2023.1080p.BluRay.x264-SIGNS' },
+];
+
+const seen = new Set();
 let mode = 'ok';
 const fetched = [];
 global.fetch = async (url) => {
@@ -39,8 +60,9 @@ global.fetch = async (url) => {
     if (mode === 'garbage') return reply('<html>not json');
     if (mode === 'nogreek') return reply(JSON.stringify({ subtitles: listing.filter((s) => s.lang !== 'ell') }));
     if (mode === 'empty') return reply(JSON.stringify({}));
-    return reply(JSON.stringify({ subtitles: listing }));
+    return reply(JSON.stringify({ subtitles: /tt00000(05|06)/.test(String(url)) ? listing2 : listing }));
   }
+  if (mode === 'flaky' && !seen.has(String(url))) { seen.add(String(url)); return reply('<html>temporary error', 520); }
   const m = /\/file\/(\d+)$/.exec(String(url));
   if (m && files[m[1]]) return reply(files[m[1]]);
   return reply('nope', 404);
@@ -101,6 +123,26 @@ test('a camera-copy file name puts the camera timing first', async () => {
 test('works through the Vercel rewrite and with encoded episode ids', async () => {
   assert.ok((await list('/api/index?__p=subtitles/series/tt0000003%3A1%3A2.json')).length >= 1);
   assert.ok((await list('/subtitles/series/tt0000003:1:2/videoHash=abc&videoSize=5.json')).length >= 1);
+});
+
+test('a temporary server error on a download is retried, not treated as an empty file', async () => {
+  mode = 'flaky';
+  const subs = await list('/subtitles/movie/tt0000006.json');
+  mode = 'ok';
+  assert.ok(seen.size >= 5, 'the downloads should have failed once each');
+  assert.ok(subs.length >= 2, `got ${subs.length}`);
+});
+
+test('releases about a second apart are kept apart, and each gets its own correct version', async () => {
+  const subs = await list('/subtitles/movie/tt0000005.json');
+  assert.ok(subs.length >= 2, `expected a version per release, got ${subs.length}`);
+  const errs = [];
+  for (const sub of subs) {
+    const got = await fetchSrt(sub);
+    errs.push([H.error(got, greek2).median, H.error(got, later(greek2)).median]);
+  }
+  assert.ok(errs.some((e) => e[0] <= 150), `no version matches the web release: ${JSON.stringify(errs)}`);
+  assert.ok(errs.some((e) => e[1] <= 150), `no version matches the BluRay release: ${JSON.stringify(errs)}`);
 });
 
 test('answers with an empty list, never an error, when things go wrong', async () => {
