@@ -29,6 +29,23 @@ You need a free [Vercel](https://vercel.com) account. No coding is involved.
 The addon is saved to your Stremio account, so it appears on every device you are signed in to,
 including TVs. To share it with friends, send them the address from step 3.
 
+### Optional: a second source of subtitles
+
+Out of the box the addon searches one place, Stremio's OpenSubtitles listing. For some films,
+older ones especially, that listing only has subtitles for a release nobody streams any more, so
+there is nothing with the right timing to sync to. [SubDL](https://subdl.com) often has
+subtitles for BluRay and web releases that are missing there. To switch it on:
+
+1. Create a free account at subdl.com and copy your API key from your account's API page.
+2. In Vercel, open your project, then **Settings**, then **Environment Variables**.
+3. Add a variable named `SUBDL_API_KEY` with the key as its value, and save.
+4. Open **Deployments**, and choose **Redeploy** on the latest one so the key takes effect.
+
+The key stays on the server. SubDL puts it inside the download links it returns, so the addon
+strips it from every link before building its own, and adds it back only when the server itself
+downloads a file. Tests check that it never appears in an answer or inside a subtitle link.
+Without a key this source is simply off.
+
 ### What the free plan covers
 
 Vercel's free plan is plenty for a household and friends. Working out a title for the first time
@@ -48,7 +65,7 @@ plan has no billing, and Stremio carries on with its other subtitles.
 
 1. When you play something, Stremio asks the addon for subtitles for that title.
 2. The addon asks Stremio's OpenSubtitles addon for the subtitles it has for that title, in
-   every language.
+   every language. If a SubDL key is set, it asks SubDL too, for your language and English.
 3. It reads each subtitle's release name and compares it with the name of the video file, when
    Stremio provides one, to decide which subtitles are worth downloading: at most 20 (up to 6 in
    your language and 14 in others), six at a time.
@@ -86,8 +103,8 @@ correct it with the subtitle delay setting in Stremio's player.
   nothing to sync to. For the commonest case, 25 fps DVD subtitles, it adds a film-speed
   version as described above, which is a guess and may need a delay adjustment. It assumes
   23.976 fps; a copy at exactly 24 fps would still drift by about six seconds over 100 minutes.
-- It can only retime subtitles that exist on OpenSubtitles for your language. In a check of 31
-  well-known titles, 6 had no Greek subtitles there.
+- It can only retime subtitles that exist in its sources for your language. In a check of 31
+  well-known titles, 6 had no Greek subtitles on OpenSubtitles.
 - Where a film has a cut in the middle, one or two lines right at the cut can stay mistimed.
 - It depends on Stremio's OpenSubtitles addon. If that service changes or is unavailable, this
   addon returns nothing until it is back.
@@ -99,11 +116,13 @@ correct it with the subtitle delay setting in Stremio's player.
 
 The addon receives what Stremio sends to every subtitle addon: the title's IMDb ID and, when
 available, the video's file name, size and fingerprint. It forwards those to Stremio's
-OpenSubtitles addon to get the list of subtitles. It has no accounts, sets no cookies, keeps no
+OpenSubtitles addon to get the list of subtitles. If SubDL is switched on, SubDL is told only
+which title it is (and the season and episode), never the file name, size or fingerprint. It has no accounts, sets no cookies, keeps no
 database, and writes no logs of its own. The hosting provider keeps standard short-lived request
 logs, as any web host does.
 
-It only ever requests anything from `opensubtitles-v3.strem.io` and `subs*.strem.io`. Redirects
+It only ever requests anything from `opensubtitles-v3.strem.io` and `subs*.strem.io`, plus
+`api.subdl.com` and `dl.subdl.com` when SubDL is switched on. Redirects
 are checked one hop at a time against that list, and a test enforces it.
 
 ## Run it on your own computer instead
@@ -144,6 +163,8 @@ node scripts/live-check.js ell
 | `lib/sync.js` | Subtitle parsing and the timing engine |
 | `lib/release.js` | Reading release names and matching them to the video file |
 | `lib/addon.js` | The addon: choosing subtitles, grouping, the web routes |
+| `lib/subdl.js` | The optional SubDL source |
+| `lib/zip.js` | Reading zipped subtitles |
 | `lib/page.js` | The install page |
 | `api/index.js`, `vercel.json` | Hosting on Vercel |
 | `server.js` | Running on your own computer |
