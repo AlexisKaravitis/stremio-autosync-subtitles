@@ -1,0 +1,14 @@
+{
+  "name": "autosync-subtitles",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Stremio addon: Greek subtitles automatically retimed to the video",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/sync.test.js test/addon.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
