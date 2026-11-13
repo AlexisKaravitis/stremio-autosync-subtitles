@@ -112,7 +112,8 @@ global.fetch = async (url) => {
     arrayBuffer: async () => Buffer.from(body),
   });
   if (url.startsWith('https://opensubtitles-v3.strem.io/')) {
-    if (mode === 'hang') return new Promise(() => {});
+    // slow, not endless: a promise that never settles would leave the test runner with nothing to wait for
+    if (mode === 'hang') return new Promise((res) => setTimeout(() => res(reply('too late', 500)), 1500));
     if (mode === 'down') return reply('oops', 500);
     if (mode === 'garbage') return reply('<html>not json');
     if (mode === 'empty') return reply(JSON.stringify({}));
@@ -188,15 +189,27 @@ test('files over the size limit are refused, whether the size is announced or no
   assert.ok(fetched.includes(u(7)) && fetched.includes(u(9)), 'both were attempted'); // and the tests above still passed
 });
 
+// What Vercel's rewrite does to a request, as measured on the live service: the path is decoded,
+// encoded again as a single value, and placed after the visitor's own query string.
+const vercel = (path, query = '') => `/api/index?${query ? query + '&' : ''}__p=${encodeURIComponent(decodeURIComponent(path))}`;
+
 test('through the Vercel rewrite: episode ids, awkward file names, the visitor\'s own query string', async () => {
-  assert.ok((await list('/api/index?__p=subtitles/series/tt0000003%3A1%3A2.json')).length >= 1);
+  assert.ok((await list(vercel('subtitles/series/tt0000003%3A1%3A2.json'))).length >= 1);
   assert.ok((await list('/subtitles/series/tt0000003:1:2/videoHash=abc&videoSize=5.json')).length >= 1);
-  const awkward = 'filename=Tom%20%26%20Jerry%20%231%3F.2010.1080p.BluRay.x264-SPARKS.mkv&videoSize=5';
-  const subs = await list(`/api/index?__p=subtitles/movie/tt0000010/${awkward}.json&utm=1`);
-  assert.ok(good(H.error(await fetchSrt(subs[0]), greekTruth)), 'the release in the file name was still recognised');
-  assert.ok(fetched.some((f) => f.endsWith(`/subtitles/movie/tt0000010/${awkward}.json`)), 'the file name reaches OpenSubtitles unchanged');
-  assert.strictEqual((await call('/api/index?__p=manifest.json&utm=1')).status, 200);
-  assert.ok((await list(`/subtitles/movie/tt0000013/${awkward}.json?utm=1`)).length >= 1, 'same on a plain server');
+
+  const name = 'Tom & Jerry #1? 100%.2010.1080p.BluRay.x264-SPARKS.mkv';
+  const sent = `filename=${encodeURIComponent(name)}&videoSize=5`; // how Stremio sends it
+  for (const [id, url] of [
+    ['tt0000010', vercel(`subtitles/movie/tt0000010/${sent}.json`, 'utm=1')],
+    ['tt0000013', `/subtitles/movie/tt0000013/${sent}.json?utm=1`], // the same request on a plain server
+  ]) {
+    const subs = await list(url);
+    assert.ok(good(H.error(await fetchSrt(subs[0]), greekTruth)), `${id}: the release in the file name was recognised`);
+    assert.ok(fetched.includes(`https://opensubtitles-v3.strem.io/subtitles/movie/${id}/${sent}.json`), `${id}: the whole file name reaches OpenSubtitles`);
+  }
+  const m = await call(vercel('manifest.json', 'utm=1&z=2'));
+  assert.strictEqual(JSON.parse(m.body).id, 'community.greek.autosync');
+  assert.strictEqual(JSON.parse((await call(vercel('spa/manifest.json'))).body).id, 'community.autosync.spa');
 });
 
 test('a temporary server error on a download is retried, not treated as an empty file', async () => {
@@ -298,7 +311,7 @@ test('links point at whichever address the request came to; forged addresses are
 
 test('rejects tampered links and odd requests without leaking details', async () => {
   const evil = Buffer.from(JSON.stringify({ g: 'https://evil.example/a', r: 'http://169.254.169.254/latest' })).toString('base64url');
-  const paths = [`/sub/${evil}.srt`, '/sub/AAAA.srt', `/sub/${'A'.repeat(900)}.srt`, '/sub/..%2f..%2fetc.srt', '/nope', '/subtitles/tv/tt1.json'];
+  const paths = [`/sub/${evil}.srt`, '/sub/AAAA.srt', `/sub/${'A'.repeat(900)}.srt`, '/sub/..%2f..%2fetc.srt', '/nope', '/subtitles/tv/tt1.json', '/sub/%E0%A4%A.srt', '/api/index?__p=%E0%A4%A'];
   for (const path of paths) {
     const r = await call(path);
     assert.strictEqual(r.status, 404, path);
