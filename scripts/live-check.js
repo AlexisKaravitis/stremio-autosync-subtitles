@@ -31,11 +31,7 @@ const TITLES = [
     let line;
     try {
       const r = await A.subtitles(lang, type, id, '', 'http://local');
-      const fits = [];
-      for (const s of r.subtitles) {
-        const { info } = await A.syncedSrt(s.url.split('/sub/')[1].replace('.srt', ''));
-        fits.push(`${info.before.toFixed(2)}>${info.after.toFixed(2)}${info.ratio !== 1 ? ' speed' : ''}${info.splits ? ' cuts' : ''}`);
-      }
+      const fits = r.info.map((info) => `${info.before.toFixed(2)}>${info.after.toFixed(2)}${info.ratio !== 1 ? ' speed' : ''}${info.splits ? ' cuts' : ''}${info.filmSpeed ? ' film-speed' : ''}`);
       if (r.subtitles.length) withSubs++;
       line = r.subtitles.length ? `${r.subtitles.length} version(s)  fit ${fits.join(' | ')}` : `none (${r.note || 'nothing matched'})`;
     } catch (e) {

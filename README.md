@@ -43,18 +43,29 @@ subtitles for BluRay and web releases that are missing there. To switch it on:
 
 The key stays on the server. SubDL puts it inside the download links it returns, so the addon
 strips it from every link before building its own, and adds it back only when the server itself
-downloads a file. Tests check that it never appears in an answer or inside a subtitle link.
-Without a key this source is simply off.
+downloads a file. Tests check that it never appears in an answer, a header, a subtitle file or
+inside a subtitle link. Without a key this source does not exist: it is never contacted.
 
 SubDL is a fallback, not an equal, because its free plan allows only 50 downloads a day:
 
-- The addon asks it only when OpenSubtitles did not answer, has nothing in your language, or
-  has no subtitle for the kind of release you are playing (for example only DVD ones for a
-  BluRay copy).
-- It takes at most three files from SubDL for a title, one at a time. That is roughly 16 new
-  titles a day; an answer that used SubDL is kept for three days, so repeats cost nothing.
-- When SubDL says the limit is used up, it is not contacted again until the time it gives, and
-  you get what OpenSubtitles alone has in the meantime.
+- **When it is asked.** Only when OpenSubtitles did not answer, has nothing in your language,
+  or has no subtitle in another language for the kind of copy you are playing (for example only
+  DVD ones for a BluRay copy). The kind is read from the video's file name; a file over 2.5 GB
+  counts as a BluRay or web copy whatever it is called.
+- **What it takes.** At most three files for a title, and only ones that can supply what was
+  missing: SubDL's DVD subtitles are no use for a BluRay copy, so they are not downloaded.
+- **How long it is remembered.** An answer that cost downloads is kept for three days. A file
+  that turned out to be unusable is not downloaded again.
+- **When SubDL refuses.** "Too many requests" is never answered with another request. SubDL is
+  left alone for as long as it says, up to a day once the daily limit is used up, and you get
+  what OpenSubtitles alone has in the meantime. It gets one short try per request and can
+  never hold the player up.
+- **Who can spend it.** A subtitle link that makes the server download from SubDL is signed, so
+  only links your own copy issued are honoured.
+
+In practice that is on the order of ten new titles a day. This is a rough figure, not a
+promise: the addon keeps nothing on disk, so a copy that has just restarted may download a
+file again, and the same title played from a differently named file counts as new.
 
 ### What the free plan covers
 
@@ -92,7 +103,8 @@ plan has no billing, and Stremio carries on with its other subtitles.
      frame-rate corrections, finds the shift where the lines overlap the speech the most, and
      then checks whether the shift needs to change partway through (ad breaks, different cuts).
 7. A version is offered only if at least 72% of it lines up with the other-language subtitle.
-   Up to four are listed in the player's subtitle menu, most likely first.
+   Up to four are listed in the player's subtitle menu, most likely first. Each link carries
+   the recipe for its own retiming, so serving a version needs one download and no working-out.
 
 If the first version is off, try the next one: the addon cannot see your video, only work out
 which releases exist.
@@ -133,7 +145,7 @@ database, and writes no logs of its own. The hosting provider keeps standard sho
 logs, as any web host does.
 
 It only ever requests anything from `opensubtitles-v3.strem.io` and `subs*.strem.io`, plus
-`api.subdl.com` and `dl.subdl.com` when SubDL is switched on. Redirects
+`api.subdl.com` and `dl.subdl.com` while a SubDL key is set and never otherwise. Redirects
 are checked one hop at a time against that list, and a test enforces it.
 
 ## Run it on your own computer instead
@@ -157,9 +169,11 @@ npm test
 The tests build synthetic films and break their subtitles in known ways. For a delay or a wrong
 frame rate, every line must come back to within 0.3 seconds. For cuts in the middle, the typical
 line must be within 0.15 seconds and at most two lines beside each cut may stay wrong. They also
-run the whole addon against a fake OpenSubtitles: outages, corrupt data, oversized files,
-redirects to other sites, awkward file names, forged addresses and tampered links. No real
-subtitle files are stored in this repository.
+run the whole addon against fake versions of both sources: outages, corrupt data, oversized
+files, redirects to other sites, awkward file names, forged addresses, tampered and forged
+links, refusals with every form of "wait this long", and a source that never answers. The zip
+reader is fed thousands of randomly damaged archives. No real subtitle files are stored in this
+repository.
 
 To try it against real titles (this contacts the real service, so run it sparingly):
 
