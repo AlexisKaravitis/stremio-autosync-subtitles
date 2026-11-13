@@ -478,8 +478,10 @@ test('SubDL: after "too many requests" it is left alone, and the addon still ans
   subdlBusy = true;
   const before = fetched.length;
   try {
-    const subs = await list(`/subtitles/movie/tt0000045/${BLURAY}.json`);
+    const r = await call(`/subtitles/movie/tt0000045/${BLURAY}.json`);
+    const subs = JSON.parse(r.body).subtitles;
     assert.ok(subs.length >= 1, 'the OpenSubtitles versions are still offered');
+    assert.strictEqual(r.headers['cache-control'], 'public, max-age=300, s-maxage=300', 'kept only briefly, so the fuller answer is tried for soon');
     const downloads = fetched.slice(before).filter((f) => f.startsWith('https://dl.subdl.com/'));
     assert.strictEqual(downloads.length, 1, 'one refusal is enough: no retry, and the other files are not attempted');
   } finally { subdlBusy = false; delete process.env.SUBDL_API_KEY; }
