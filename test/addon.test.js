@@ -118,9 +118,10 @@ listings.G = dvdOnly(23976); // the same files, marked as film speed
 // every request, and it puts the key inside the download links it returns.
 const Z = require('../lib/zip');
 const KEY = 'test-key-do-not-leak';
+const BLURAY = 'filename=Seven.2002.1080p.BluRay.x264-BBB.mkv'; // the copy being played in these tests
 const subdlZips = {};     // archive name -> zip
 const subdlListings = {}; // imdb id -> what SubDL lists
-let subdlDown = false;
+let subdlDown = false, subdlBusy = false;
 function subdlFetch(url) {
   const reply = (body, status = 200) => ({ ok: status >= 200 && status < 300, status, headers: { get: () => null }, arrayBuffer: async () => Buffer.from(body) });
   const q = new URL(url);
@@ -130,6 +131,7 @@ function subdlFetch(url) {
     const list = subdlListings[q.searchParams.get('imdb_id')] || [];
     return reply(JSON.stringify({ status: true, subtitles: list.map((x) => ({ ...x, url: `${x.url}?api_key=${KEY}` })) }));
   }
+  if (subdlBusy) return reply('slow down', 429);
   const name = q.pathname.split('/').pop();
   return subdlZips[name] ? reply(subdlZips[name]) : reply('nope', 404);
 }
@@ -158,9 +160,11 @@ const english = [
 subdlListings.tt0000040 = english;
 subdlListings.tt0000042 = english;
 subdlListings.tt0000043 = english;
+subdlListings.tt0000044 = english;
+subdlListings.tt0000045 = english.slice(0, 2).map((x, i) => ({ ...x, url: `/subtitle/200-${i}.zip` })); // files not fetched by any other test
 subdlListings.tt0000041 = [...english, { release_name: 'Seven (2002) 1080p-720p BDRip', language: 'EL', lang: 'Greek', url: '/subtitle/100-3.zip' }];
 
-const titles = { tt0000040: 'S', tt0000041: 'T', tt0000042: 'S', tt0000043: 'S', tt0000030: 'F', tt0000031: 'G', tt0000005: 'B', tt0000006: 'B', tt0000007: 'C', tt0000008: 'D', tt0000009: 'E' };
+const titles = { tt0000040: 'S', tt0000041: 'T', tt0000042: 'S', tt0000043: 'S', tt0000044: 'S', tt0000045: 'S', tt0000030: 'F', tt0000031: 'G', tt0000005: 'B', tt0000006: 'B', tt0000007: 'C', tt0000008: 'D', tt0000009: 'E' };
 const seen = new Set();
 const fetched = [];
 let mode = 'ok';
@@ -410,7 +414,7 @@ test('rejects tampered links and odd requests without leaking details', async ()
 test('SubDL: a BluRay reference from the second source lets a DVD-only translation be retimed properly', async () => {
   process.env.SUBDL_API_KEY = KEY;
   try {
-    const r = await call('/subtitles/movie/tt0000040.json');
+    const r = await call(`/subtitles/movie/tt0000040/${BLURAY}.json`);
     const subs = JSON.parse(r.body).subtitles;
     const errs = [];
     for (const sub of subs) errs.push(H.error(await fetchSrt(sub), onBluRay(greek7)).median);
@@ -450,9 +454,35 @@ test('SubDL: off without a key, and its being down never breaks the addon', asyn
   process.env.SUBDL_API_KEY = KEY;
   subdlDown = true;
   try {
-    const subs = await list('/subtitles/movie/tt0000043.json');
+    const subs = await list(`/subtitles/movie/tt0000043/${BLURAY}.json`);
+    assert.ok(fetched.some((f) => f.startsWith('https://api.subdl.com/') && f.includes('tt0000043')), 'SubDL was asked');
     assert.ok(subs.length >= 1, 'OpenSubtitles alone still answers');
   } finally { subdlDown = false; delete process.env.SUBDL_API_KEY; }
+});
+
+test('SubDL: only asked when OpenSubtitles lacks what is needed', async () => {
+  process.env.SUBDL_API_KEY = KEY;
+  try {
+    // OpenSubtitles has the language, and nothing says the copy being played is a different kind
+    await list('/subtitles/movie/tt0000044.json');
+    await list('/subtitles/movie/tt0000044/filename=Seven.2002.DVDRip.XviD-AAA.avi.json');
+    assert.ok(!fetched.some((f) => f.startsWith('https://api.subdl.com/') && f.includes('tt0000044')), 'not asked: OpenSubtitles had a matching kind of release');
+    // scenario A already has BluRay references on OpenSubtitles
+    await list('/subtitles/movie/tt0000046/filename=Film.2010.1080p.BluRay.x264-SPARKS.mkv.json');
+    assert.ok(!fetched.some((f) => f.startsWith('https://api.subdl.com/') && f.includes('tt0000046')), 'not asked: BluRay references were already there');
+  } finally { delete process.env.SUBDL_API_KEY; }
+});
+
+test('SubDL: after "too many requests" it is left alone, and the addon still answers', async () => {
+  process.env.SUBDL_API_KEY = KEY;
+  subdlBusy = true;
+  const before = fetched.length;
+  try {
+    const subs = await list(`/subtitles/movie/tt0000045/${BLURAY}.json`);
+    assert.ok(subs.length >= 1, 'the OpenSubtitles versions are still offered');
+    const downloads = fetched.slice(before).filter((f) => f.startsWith('https://dl.subdl.com/'));
+    assert.strictEqual(downloads.length, 1, 'one refusal is enough: no retry, and the other files are not attempted');
+  } finally { subdlBusy = false; delete process.env.SUBDL_API_KEY; }
 });
 
 test('zip archives: reads the subtitle, refuses junk and oversized entries', () => {

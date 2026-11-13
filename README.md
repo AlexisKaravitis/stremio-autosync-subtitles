@@ -46,6 +46,12 @@ strips it from every link before building its own, and adds it back only when th
 downloads a file. Tests check that it never appears in an answer or inside a subtitle link.
 Without a key this source is simply off.
 
+SubDL is a fallback, not an equal. The addon asks it only when OpenSubtitles did not answer, has
+nothing in your language, or has no subtitle for the kind of release you are playing (for
+example only DVD ones for a BluRay copy). It takes at most six files from SubDL for a title,
+one at a time, and leaves SubDL alone for a minute after a "too many requests" answer. If SubDL
+is slow or unavailable, you get what OpenSubtitles alone would have given.
+
 ### What the free plan covers
 
 Vercel's free plan is plenty for a household and friends. Working out a title for the first time
@@ -65,7 +71,8 @@ plan has no billing, and Stremio carries on with its other subtitles.
 
 1. When you play something, Stremio asks the addon for subtitles for that title.
 2. The addon asks Stremio's OpenSubtitles addon for the subtitles it has for that title, in
-   every language. If a SubDL key is set, it asks SubDL too, for your language and English.
+   every language. If a SubDL key is set and OpenSubtitles lacks what is needed, it asks SubDL too,
+   for your language and English.
 3. It reads each subtitle's release name and compares it with the name of the video file, when
    Stremio provides one, to decide which subtitles are worth downloading: at most 20 (up to 6 in
    your language and 14 in others), six at a time.
