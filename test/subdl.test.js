@@ -76,7 +76,13 @@ global.fetch = async (url, opts = {}) => {
       return reply(JSON.stringify({ status: true, subtitles: list.map((x) => ({ ...x, url: `${x.url}?api_key=${KEY}` })) }));
     }
     const name = q.pathname.split('/').pop().replace('.zip', '');
-    if (behave.dlHang) return new Promise((_, rej) => opts.signal.addEventListener('abort', () => rej(new Error('timed out'))));
+    if (behave.dlHang) {
+      // never answers until the addon gives up; the timer only keeps the test runner waiting meanwhile
+      return new Promise((_, rej) => {
+        const waiting = setTimeout(() => rej(new Error('the addon never gave up')), 10000);
+        opts.signal.addEventListener('abort', () => { clearTimeout(waiting); rej(new Error('timed out')); });
+      });
+    }
     if (behave.dlStatus !== 200) return reply('{"error":"api_download_limit_exceeded"}', behave.dlStatus, behave.dlHeaders);
     if (behave.redirect[name]) return reply('', 302, { location: behave.redirect[name] });
     if (behave.fail.has(name)) return reply('broken', 500);
